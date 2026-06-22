@@ -1,0 +1,183 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String
+  role      String   // "PATIENT", "DOCTOR", "LAB_ADMIN"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  patient   Patient?
+  doctor    Doctor?
+  labAdmin  LabAdmin?
+  auditLogs AuditLog[]
+}
+
+model Patient {
+  id           String         @id @default(uuid())
+  userId       String         @unique
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dateOfBirth  String?
+  gender       String?        // "Male", "Female", "Other"
+  reports      Report[]
+  familyId     String?        // For Family Lab Accounts
+  familyGroup  FamilyGroup?   @relation(fields: [familyId], references: [id])
+  documents      Document[]
+  timelineEvents TimelineEvent[]
+  messages       Message[]
+  goals          Goal[]
+  wearables      WearableData[]
+}
+
+model Doctor {
+  id          String       @id @default(uuid())
+  userId      String       @unique
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  specialty   String
+  doctorNotes DoctorNote[]
+  messages    Message[]
+}
+
+model LabAdmin {
+  id      String @id @default(uuid())
+  userId  String @unique
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  labId   String
+  lab     Lab    @relation(fields: [labId], references: [id], onDelete: Cascade)
+}
+
+model Lab {
+  id       String     @id @default(uuid())
+  name     String
+  reports  Report[]
+  admins   LabAdmin[]
+}
+
+model Report {
+  id          String       @id @default(uuid())
+  patientId   String
+  patient     Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  labId       String
+  lab         Lab          @relation(fields: [labId], references: [id], onDelete: Cascade)
+  title       String       // e.g., "CBC Blood Test", "Vitamin Panel"
+  testDate    DateTime
+  status      String       // "Processing", "Completed", "Reviewed", "Delivered"
+  fileUrl     String?      // Path or placeholder
+  results     LabResult[]
+  doctorNotes DoctorNote[]
+  shares      ReportShare[]
+}
+
+model LabResult {
+  id             String   @id @default(uuid())
+  reportId       String
+  report         Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  testName       String   // e.g., "Hemoglobin", "Vitamin D", "Cholesterol"
+  value          Float
+  unit           String   // e.g., "g/dL", "ng/mL", "mg/dL"
+  referenceRange String   // e.g., "12.0 - 15.5"
+  status         String   // "Normal", "High", "Low"
+}
+
+model DoctorNote {
+  id        String   @id @default(uuid())
+  reportId  String
+  report    Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  doctorId  String
+  doctor    Doctor   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  note      String
+  createdAt DateTime @default(now())
+}
+
+model FamilyGroup {
+  id       String    @id @default(uuid())
+  name     String    // e.g., "Sarah's Family"
+  members  Patient[]
+}
+
+model ReportShare {
+  id         String   @id @default(uuid())
+  reportId   String
+  report     Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  sharedWith String   // e.g., "Dr. Ahmed"
+  accessDays Int      // e.g., 7
+  permission String   // "View only"
+  token      String   @unique
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  message   String
+  status    String   // "UNREAD", "READ"
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action    String   // e.g., "Report viewed", "Report uploaded"
+  timestamp DateTime @default(now())
+}
+
+model Document {
+  id         String   @id @default(uuid())
+  patientId  String
+  patient    Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  title      String
+  category   String   // "Lab Reports", "Imaging", "Prescriptions", "Vaccinations", "Insurance"
+  fileSize   String   // e.g., "1.2 MB"
+  fileUrl    String?
+  uploadedAt DateTime @default(now())
+}
+
+model TimelineEvent {
+  id          String   @id @default(uuid())
+  patientId   String
+  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  title       String   // e.g. "Annual Wellness Checkup"
+  eventType   String   // "Report", "Visit", "Medication", "Document"
+  eventDate   DateTime
+  description String?
+}
+
+model Message {
+  id            String   @id @default(uuid())
+  patientId     String
+  patient       Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctorId      String
+  doctor        Doctor   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  senderRole    String   // "PATIENT" or "DOCTOR"
+  content       String
+  attachmentUrl String?
+  createdAt     DateTime @default(now())
+}
+
+model Goal {
+  id        String   @id @default(uuid())
+  patientId String
+  patient   Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  title     String
+  completed Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+}
+
+model WearableData {
+  id        String   @id @default(uuid())
+  patientId String
+  patient   Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  dataType  String   // "Steps", "HeartRate", "Sleep"
+  value     Float
+  timestamp DateTime
+}
