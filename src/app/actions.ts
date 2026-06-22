@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { db } from '@/lib/db';
 import { login, logout, getSession } from '@/lib/auth';
 import { revalidatePath } from 'next/cache'; // Next.js revalidatePath
+import type { LabResult, Report } from '@prisma/client';
 
 export async function handleLogin(formData: FormData) {
   const email = formData.get('email') as string;
@@ -301,8 +302,9 @@ export async function getReportAIInterpretation(reportId: string, userQuery?: st
     }
 
     // Format lab results for AI
-    const resultsFormatted = report.results
-      .map(r => `- ${r.testName}: ${r.value} ${r.unit} (Range: ${r.referenceRange}) - Status: ${r.status}`)
+    const results = report.results as LabResult[];
+    const resultsFormatted = results
+      .map((r: LabResult) => `- ${r.testName}: ${r.value} ${r.unit} (Range: ${r.referenceRange}) - Status: ${r.status}`)
       .join('\n');
 
     const promptMessage = userQuery
@@ -357,7 +359,7 @@ Rules:
     if (userQuery) {
       const q = userQuery.toLowerCase();
       if (q.includes('vitamin') || q.includes('vit')) {
-        const vitResult = report.results.find(r => r.testName.toLowerCase().includes('vitamin'));
+        const vitResult = results.find(r => r.testName.toLowerCase().includes('vitamin'));
         if (vitResult) {
           explanationText = `### Vitamin D Query Explanation
 Your Vitamin D is measured at **${vitResult.value} ${vitResult.unit}**.
@@ -370,7 +372,7 @@ Your Vitamin D is measured at **${vitResult.value} ${vitResult.unit}**.
 I couldn't find a direct Vitamin test in this specific report. However, general wellness reports indicate maintaining balanced micronutrients is key. Please consult your physician about checking Vitamin D or B12.`;
         }
       } else if (q.includes('cholesterol') || q.includes('lipid')) {
-        const cholResult = report.results.find(r => r.testName.toLowerCase().includes('cholesterol'));
+        const cholResult = results.find(r => r.testName.toLowerCase().includes('cholesterol'));
         if (cholResult) {
           explanationText = `### Cholesterol Query Explanation
 Your Cholesterol is **${cholResult.value} ${cholResult.unit}**.
@@ -383,7 +385,7 @@ Your Cholesterol is **${cholResult.value} ${cholResult.unit}**.
 There is no direct Cholesterol reading in this report. In general, keeping total cholesterol below 200 mg/dL is standard. Discuss with your doctor if a Lipid Panel should be ordered.`;
         }
       } else if (q.includes('hemoglobin') || q.includes('cbc') || q.includes('blood')) {
-        const hemoResult = report.results.find(r => r.testName.toLowerCase() === 'hemoglobin');
+        const hemoResult = results.find(r => r.testName.toLowerCase() === 'hemoglobin');
         explanationText = `### CBC & Blood Count Analysis
 Your Hemoglobin level is **${hemoResult ? hemoResult.value : '12.5'} g/dL**, which is **Normal** (ideal range is **12.0 - 15.5 g/dL**).
 * **Clinical Insight**: Hemoglobin is the protein in red blood cells that carries oxygen throughout your body. Your level indicates your red blood cell oxygenation is currently optimal.
@@ -392,12 +394,12 @@ Your Hemoglobin level is **${hemoResult ? hemoResult.value : '12.5'} g/dL**, whi
   2. Ask how often a CBC should be repeated for routine monitoring.`;
       } else {
         explanationText = `### Response to "${userQuery}"
-Based on your report "${report.title}" dated ${new Date(report.testDate).toLocaleDateString()}, you have ${report.results.length} tested metrics.
+Based on your report "${report.title}" dated ${new Date(report.testDate).toLocaleDateString()}, you have ${results.length} tested metrics.
 * **Tested Values**:
-${report.results.map(r => `  - **${r.testName}**: ${r.value} ${r.unit} (${r.status})`).join('\n')}
+${results.map(r => `  - **${r.testName}**: ${r.value} ${r.unit} (${r.status})`).join('\n')}
 
 * **Clinical Guidance**:
-  - The metrics show your values are mostly in the ${report.results.some(r => r.status !== 'Normal') ? 'varying' : 'healthy normal'} range.
+  - The metrics show your values are mostly in the ${results.some(r => r.status !== 'Normal') ? 'varying' : 'healthy normal'} range.
   - Make sure to review the specific notes from Dr. Robert Chen on this report.
 
 * **Questions to discuss with your doctor**:
@@ -406,15 +408,15 @@ ${report.results.map(r => `  - **${r.testName}**: ${r.value} ${r.unit} (${r.stat
       }
     } else {
       // General Report Summary
-      const outOfRange = report.results.filter(r => r.status !== 'Normal');
-      const lowList = outOfRange.filter(r => r.status === 'Low').map(r => r.testName);
-      const highList = outOfRange.filter(r => r.status === 'High').map(r => r.testName);
+      const outOfRange = results.filter((r: LabResult) => r.status !== 'Normal');
+      const lowList = outOfRange.filter((r: LabResult) => r.status === 'Low').map((r: LabResult) => r.testName);
+      const highList = outOfRange.filter((r: LabResult) => r.status === 'High').map((r: LabResult) => r.testName);
 
       explanationText = `### Report Summary: ${report.title}
-Your report contains **${report.results.length} tested values**. Most of your results fall within the standard clinical parameters.
+Your report contains **${results.length} tested values**. Most of your results fall within the standard clinical parameters.
 
 ### Important Sections:
-${report.results.map(r => {
+${results.map((r: LabResult) => {
   return `- **${r.testName}**: ${r.value} ${r.unit} — *${r.status}* (${r.referenceRange})`;
 }).join('\n')}
 
@@ -522,6 +524,9 @@ export async function compareReportsAI(reportId1: string, reportId2: string) {
     const olderRep = isRep1Older ? report1 : report2;
     const newerRep = isRep1Older ? report2 : report1;
 
+    const olderResults = olderRep.results as LabResult[];
+    const newerResults = newerRep.results as LabResult[];
+
     const comparisons: {
       parameter: string;
       olderValue: number;
@@ -531,8 +536,8 @@ export async function compareReportsAI(reportId1: string, reportId2: string) {
       direction: 'Improved' | 'Declined' | 'Stable';
     }[] = [];
 
-    olderRep.results.forEach(oldRes => {
-      const newRes = newerRep.results.find(r => r.testName.toLowerCase() === oldRes.testName.toLowerCase());
+    olderResults.forEach((oldRes: LabResult) => {
+      const newRes = newerResults.find((r: LabResult) => r.testName.toLowerCase() === oldRes.testName.toLowerCase());
       if (newRes) {
         const diff = newRes.value - oldRes.value;
         const pct = oldRes.value !== 0 ? ((diff / oldRes.value) * 100).toFixed(1) + '%' : 'N/A';
@@ -623,12 +628,13 @@ export async function generateDoctorPrepAI(patientId: string) {
       return { error: 'Patient profile not found.' };
     }
 
-    const reportsCount = patient.reports.length;
-    const outOfRangeCount = patient.reports.flatMap(r => r.results).filter(res => res.status !== 'Normal').length;
+    const reports = patient.reports as (Report & { results: LabResult[] })[];
+    const reportsCount = reports.length;
+    const allResults = reports.flatMap(r => r.results);
+    const outOfRangeCount = allResults.filter(res => res.status !== 'Normal').length;
 
     // Collect recent deviations
-    const deviations = patient.reports
-      .flatMap(r => r.results)
+    const deviations = allResults
       .filter(res => res.status !== 'Normal')
       .map(d => `- **${d.testName}**: Measured ${d.value} ${d.unit} (Category: ${d.status})`)
       .slice(0, 4);
@@ -638,8 +644,8 @@ export async function generateDoctorPrepAI(patientId: string) {
 **Recent Diagnostics Evaluated**: ${reportsCount} reports in database.
 
 #### Biometric Summary:
-- Total checked metrics: **${patient.reports.flatMap(r => r.results).length}**
-- Normal parameters: **${patient.reports.flatMap(r => r.results).filter(res => res.status === 'Normal').length}**
+- Total checked metrics: **${allResults.length}**
+- Normal parameters: **${allResults.filter(res => res.status === 'Normal').length}**
 - Parameters needing clinical adjustment: **${outOfRangeCount}**
 
 `;

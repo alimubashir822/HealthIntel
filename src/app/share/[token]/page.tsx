@@ -7,6 +7,16 @@ import {
   Shield 
 } from 'lucide-react';
 import PrintButton from '@/components/PrintButton';
+import type { 
+  ReportShare, 
+  Report, 
+  Patient, 
+  User, 
+  LabResult, 
+  DoctorNote, 
+  Doctor, 
+  Lab 
+} from '@prisma/client';
 
 interface SharePageProps {
   params: Promise<{
@@ -22,7 +32,7 @@ export default async function SharePage({ params }: SharePageProps) {
   }
 
   // Find the share details
-  const share = await db.reportShare.findUnique({
+  const rawShare = await db.reportShare.findUnique({
     where: { token },
     include: {
       report: {
@@ -48,9 +58,24 @@ export default async function SharePage({ params }: SharePageProps) {
     },
   });
 
-  if (!share) {
+  if (!rawShare) {
     notFound();
   }
+
+  const share = rawShare as (ReportShare & {
+    report: Report & {
+      patient: Patient & {
+        user: User;
+      };
+      results: LabResult[];
+      doctorNotes: (DoctorNote & {
+        doctor: Doctor & {
+          user: User;
+        };
+      })[];
+      lab: Lab;
+    };
+  });
 
   // Expiration check
   const isExpired = new Date(share.expiresAt).getTime() < Date.now();

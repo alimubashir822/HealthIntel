@@ -2,6 +2,7 @@ import { getSession } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { redirect } from 'next/navigation';
 import DoctorDashboardClient from './DoctorDashboardClient';
+import type { Patient, User, Report, LabResult, DoctorNote } from '@prisma/client';
 
 export default async function DoctorDashboardPage() {
   const session = await getSession();
@@ -75,11 +76,19 @@ export default async function DoctorDashboardPage() {
     },
   });
 
+  const patientsTyped = patients as (Patient & {
+    user: User;
+    reports: (Report & {
+      results: LabResult[];
+      doctorNotes: DoctorNote[];
+    })[];
+  })[];
+
   return (
     <DoctorDashboardClient
       sessionUser={session}
       currentDoctorId={doctor.id}
-      patients={patients.map(p => ({
+      patients={patientsTyped.map(p => ({
         id: p.id,
         name: p.user.name,
         email: p.user.email,

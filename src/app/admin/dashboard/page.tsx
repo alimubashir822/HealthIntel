@@ -2,6 +2,7 @@ import { getSession } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { redirect } from 'next/navigation';
 import AdminDashboardClient from './AdminDashboardClient';
+import type { Patient, User, Report, LabResult } from '@prisma/client';
 
 export default async function AdminDashboardPage() {
   const session = await getSession();
@@ -66,16 +67,19 @@ export default async function AdminDashboardPage() {
     take: 10,
   });
 
+  const patientsTyped = patients as (Patient & { user: User })[];
+  const reportsTyped = reports as (Report & { patient: Patient & { user: User }, results: LabResult[] })[];
+
   return (
     <AdminDashboardClient
       sessionUser={session}
       labName={labAdmin.lab.name}
-      patients={patients.map(p => ({
+      patients={patientsTyped.map(p => ({
         id: p.id,
         name: p.user.name,
         email: p.user.email,
       }))}
-      reports={reports.map(r => ({
+      reports={reportsTyped.map(r => ({
         id: r.id,
         title: r.title,
         testDate: r.testDate,

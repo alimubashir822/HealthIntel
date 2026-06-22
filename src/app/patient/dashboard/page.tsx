@@ -2,6 +2,7 @@ import { getSession } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { redirect } from 'next/navigation';
 import PatientDashboardClient from './PatientDashboardClient';
+import type { Patient, User, FamilyGroup } from '@prisma/client';
 
 export default async function PatientDashboardPage() {
   const session = await getSession();
@@ -38,8 +39,17 @@ export default async function PatientDashboardPage() {
     redirect('/');
   }
 
+  const patientTyped = patient as (Patient & {
+    user: User;
+    familyGroup: (FamilyGroup & {
+      members: (Patient & {
+        user: User;
+      })[];
+    }) | null;
+  });
+
   // Get family members if group exists
-  const familyMembers = patient.familyGroup?.members ?? [patient];
+  const familyMembers = (patientTyped.familyGroup?.members ?? [patientTyped]) as (Patient & { user: User })[];
 
   // Fetch reports for all family members to allow switching in the client UI
   const allFamilyReports = await db.report.findMany({
